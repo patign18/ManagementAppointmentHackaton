@@ -1,0 +1,18 @@
+@implements IDisposable
+@inject IJSRuntime JS
+<dialog @ref="element" class="clinic-modal" aria-labelledby="@titleId"><header class="modal-header"><div><span class="eyebrow">MANAGEMENTAPPOINTMENT</span><h2 id="@titleId">@Title</h2></div><button class="icon-button" type="button" aria-label="Cerrar ventana" @onclick="Close"><Icon Name="close" /></button></header><div class="modal-body">@ChildContent</div></dialog>
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    private ElementReference element;
+    private readonly string titleId = "modal-" + Guid.NewGuid().ToString("N");
+    private DotNetObjectReference<Modal>? reference;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { reference = DotNetObjectReference.Create(this); await JS.InvokeVoidAsync("clinic.openDialog", element, reference); }
+    }
+    private Task Close() => OnClose.InvokeAsync();
+    [JSInvokable] public Task Cancel() => Close();
+    public void Dispose() => reference?.Dispose();
+}

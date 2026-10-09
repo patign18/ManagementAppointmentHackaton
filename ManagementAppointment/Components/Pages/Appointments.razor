@@ -1,0 +1,36 @@
+@page "/citas"
+@attribute [Authorize(Roles = Roles.Staff)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+<PageTitle>Citas · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">TU AGENDA, EN ORDEN</span><h1>Gestión de citas</h1><p>Consulta, confirma y organiza cada encuentro.</p></div><div class="heading-actions"><button class="button secondary" @onclick="Reload" disabled="@Busy"><Icon Name="arrow" />Actualizar</button>@if (canCreate) { <button class="button primary" @onclick="@(() => creating = true)"><Icon Name="plus" />Nueva cita</button> }</div></div>
+<Notice Kind="error" Message="@Error" /><Notice Message="@Success" />
+<section class="card"><div class="filter-bar"><div class="filter-field wide"><label for="appointment-search">Buscar</label><input id="appointment-search" @bind="search" @bind:event="oninput" @bind:after="ResetPage" placeholder="Paciente, médico o especialidad" /></div><div class="filter-field"><label for="appointment-from">Desde</label><input id="appointment-from" type="date" @bind="from" /></div><div class="filter-field"><label for="appointment-until">Hasta</label><input id="appointment-until" type="date" @bind="until" /></div><div class="filter-field"><label for="appointment-status">Estado</label><select id="appointment-status" @bind="status" @bind:after="ResetPage"><option value="">Todos</option>@foreach (var s in Enum.GetValues<AppointmentStatus>()) { <option value="@s">@StatusText.Label(s)</option> }</select></div><button class="button secondary" @onclick="Reload" disabled="@Busy">Aplicar fechas</button></div>
+    @if (Loading) { <p class="loading" role="status">Cargando citas…</p> }
+    else if (!Filtered.Any()) { <EmptyState Title="No hay citas en este periodo" Description="Cambia las fechas o los filtros para consultar otras citas." /> }
+    else { <AppointmentTable Items="@Filtered.Skip((page - 1) * 10).Take(10)" OnSelect="Select" /><div class="pagination-bar"><span>@Filtered.Count() citas encontradas</span><div><button class="button small secondary" disabled="@(page == 1)" @onclick="@(() => page--)">Anterior</button><span>Página @(page) de @Pages</span><button class="button small secondary" disabled="@(page >= Pages)" @onclick="@(() => page++)">Siguiente</button></div></div> }
+</section>
+@if (creating) { <Modal Title="Nueva cita" OnClose="@(() => creating = false)"><AppointmentEditor OnSaved="Saved" OnCancel="@(() => creating = false)" /></Modal> }
+@if (selected != null) { <Modal Title="Detalle de la cita" OnClose="@(() => selected = null)"><AppointmentDetail Item="selected" OnChanged="Saved" /></Modal> }
+@code {
+    [SupplyParameterFromQuery(Name = "q")] public string? Query { get; set; }
+    private ClinicActor? actor;
+    private List<Appointment> items = [];
+    private DateOnly from, until;
+    private string search = "", status = "";
+    private int page = 1;
+    private void ResetPage() => page = 1;
+    private bool creating, canCreate;
+    private Appointment? selected;
+    private IEnumerable<Appointment> Filtered => items.Where(x => (string.IsNullOrWhiteSpace(search) || (x.Patient.FullName + " " + x.Doctor.FullName + " " + x.Doctor.Specialty?.Name).Contains(search, StringComparison.OrdinalIgnoreCase)) && (status == "" || x.Status.ToString() == status));
+    private int Pages => Math.Max(1, (int)Math.Ceiling(Filtered.Count() / 10d));
+    protected override async Task OnInitializedAsync() { from = Clock.Today; until = from.AddDays(30); search = Query ?? ""; await Reload(); }
+    private Task Reload() => Run(async () => { actor = await Clinic.ActorAsync(); canCreate = actor.IsStaff || actor.Role == Roles.Doctor; items = await Clinic.AppointmentsAsync(from, until); page = 1; });
+    private void Select(Appointment item) => selected = item;
+    private async Task Saved() { creating = false; selected = null; await Reload(); Success = "La cita fue actualizada correctamente."; }
+}
+
+
+
+
+

@@ -1,0 +1,12 @@
+@page "/restablecer"
+@layout AuthLayout
+<PageTitle>Restablecer contraseña · ManagementAppointment</PageTitle>
+<div class="auth-form"><a href="/login" class="back-link">← Volver al inicio de sesión</a><h2>Tu nueva contraseña</h2><p class="muted">Elige una contraseña segura para recuperar tu cuenta.</p>
+    @if (Error != null) { <Notice Kind="error" Message="El enlace no es válido o venció, o la contraseña no cumple los requisitos. Solicita un nuevo enlace." /><a href="/recuperar" class="button secondary">Solicitar otro enlace</a> }
+    else { <form method="post" action="/auth/reset"><AntiforgeryToken />
+    @if (string.IsNullOrWhiteSpace(Token) || string.IsNullOrWhiteSpace(Email)) { <label for="reset-email">Correo de tu cuenta médica</label><input id="reset-email" name="email" type="email" maxlength="254" autocomplete="username" required /><label for="reset-token">Código privado entregado por administración</label><textarea id="reset-token" name="token" rows="3" autocomplete="off" required></textarea> }
+    else { <input type="hidden" name="email" value="@Email" /><input type="hidden" name="token" value="@Token" /><p class="field-help">Cuenta: @Email. Puedes establecer la contraseña sin recibir correo.</p> }
+    <label for="password">Nueva contraseña</label><input id="password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required /><p class="field-help">12 caracteres, mayúscula, minúscula, número y símbolo.</p><label for="confirm">Repite la contraseña</label><input id="confirm" name="confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" required /><button type="submit" class="button primary full">Guardar contraseña</button></form> }
+</div>
+@code { [SupplyParameterFromQuery] public string? Email { get; set; } [SupplyParameterFromQuery] public string? Token { get; set; } [SupplyParameterFromQuery] public string? Error { get; set; } }
+

@@ -1,0 +1,20 @@
+@page "/login"
+@layout AuthLayout
+<PageTitle>Iniciar sesión · ManagementAppointment</PageTitle>
+<div class="auth-form"><span class="eyebrow">BIENVENIDO A TU ESPACIO</span><h2>Acceso a la oficina médica</h2><p class="muted">Acceso exclusivo para médicos y personal de la oficina.</p>
+    @if (Error != null) { <Notice Kind="error" Message="No pudimos iniciar sesión. Revisa tus datos o intenta más tarde si realizaste varios intentos." /> }
+    @if (Reset) { <Notice Message="Tu contraseña fue actualizada. Ya puedes iniciar sesión." /> }
+    <form method="post" action="/auth/login">
+        <AntiforgeryToken />
+        <label for="email">Correo electrónico</label><div class="input-icon"><Icon Name="mail" /><input id="email" name="email" type="email" placeholder="nombre@correo.com" autocomplete="username" maxlength="254" required /></div>
+        <label for="password">Contraseña</label><div class="input-icon"><Icon Name="lock" /><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Tu contraseña" maxlength="128" required /><button class="password-eye" type="button" aria-label="Mostrar u ocultar contraseña" onclick="const p=document.getElementById('password');p.type=p.type==='password'?'text':'password';this.setAttribute('aria-pressed',p.type==='text')"><Icon Name="eye" /></button></div>
+        <div class="form-options"><label class="checkbox-label"><input name="remember" type="checkbox" value="true" />Recordarme</label><a href="/recuperar">Olvidé mi contraseña</a></div>
+        <button type="submit" class="button primary full">Iniciar sesión<Icon Name="arrow" /></button>
+    </form>
+    <a href="/recuperar" class="button secondary full" style="margin-top:16px">Crear o cambiar mi contraseña</a>
+    <p class="auth-help"><Icon Name="shield" Size="16" /> Administración habilita tu cuenta médica y entrega un enlace privado para elegir tu contraseña.</p>
+</div>
+@code { [SupplyParameterFromQuery] public string? Error { get; set; } [SupplyParameterFromQuery] public bool Reset { get; set; } }
+
+
+

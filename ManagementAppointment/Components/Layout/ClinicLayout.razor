@@ -1,0 +1,20 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+<a class="skip-link" href="@(new Uri(Navigation.Uri).PathAndQuery + "#main-content")">Saltar al contenido</a>
+<input id="mobile-menu" class="mobile-menu-toggle" type="checkbox" aria-label="Abrir o cerrar el menú" />
+<div class="clinic-shell">
+    <aside class="clinic-sidebar"><Brand /><ClinicNavigation />
+        <div class="sidebar-tip"><span class="tip-icon"><Icon Name="heart" Size="26" /></span><h3>Cuidar empieza aquí</h3><p>Una agenda organizada.<br />Una atención más cercana.</p><a href="/citas">Consultar mi agenda<Icon Name="arrow" Size="16" /></a></div>
+        <form method="post" action="/auth/logout" class="logout-form"><AntiforgeryToken /><button type="submit"><Icon Name="logout" />Cerrar sesión</button></form>
+    </aside>
+    <div class="clinic-workspace">
+        <header class="clinic-topbar"><label for="mobile-menu" class="mobile-menu-button" title="Menú"><Icon Name="menu" /></label>
+            <form class="topbar-search" action="/citas" method="get" role="search"><Icon Name="search" /><input name="q" placeholder="Buscar pacientes o citas…" aria-label="Buscar citas" /></form>
+            <div class="topbar-actions"><span class="office-status"><span></span>Gestión médica</span><NotificationsMenu @rendermode="InteractiveServer" /><a href="/perfil" class="profile-link"><span class="avatar"><Icon Name="user" Size="19" /></span><span>Mi cuenta<small>Perfil y preferencias</small></span><Icon Name="chevron" Size="16" /></a></div>
+        </header>
+        <main id="main-content" class="clinic-content" tabindex="-1">@Body</main>
+        <footer class="clinic-footer">ManagementAppointment<span>Tu oficina. Una agenda que se aprovecha.</span></footer>
+    </div>
+</div>
+<div id="blazor-error-ui" role="alert">Ocurrió un error de conexión. <a href="." class="reload">Recargar</a><button class="dismiss" type="button" aria-label="Cerrar">×</button></div>
+

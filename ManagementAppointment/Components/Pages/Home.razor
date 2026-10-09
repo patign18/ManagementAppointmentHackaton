@@ -1,0 +1,17 @@
+@page "/"
+
+@layout AuthLayout
+@inject AuthenticationStateProvider Authentication
+@inject NavigationManager Navigation
+<PageTitle>ManagementAppointment</PageTitle>
+
+<div class="auth-form"><h2>Tu oficina médica</h2><p>Abriendo tu inicio…</p></div>
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await Authentication.GetAuthenticationStateAsync()).User;
+        Navigation.NavigateTo(user.Identity?.IsAuthenticated != true ? "/login" : user.IsInRole(Roles.Patient) ? "/login" : "/dashboard", true);
+    }
+}
+
+

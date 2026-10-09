@@ -1,0 +1,24 @@
+@inherits ClinicPageBase
+<h4 class="section-label">Recuperar espacios automáticamente</h4>
+<Notice Kind="error" Message="@Error" /><Notice Message="@Success" />
+<p class="field-help">Publica tus horarios semanales y activa estas reglas para tu consulta. El sistema asignará directamente los espacios recuperados a pacientes registrados por la oficina, por orden de entrada en hold y disponibilidad.</p>
+@if (!Loading)
+{
+    <form @onsubmit="Save" @onsubmit:preventDefault>
+        <label class="checkbox-label"><input type="checkbox" @bind="enabled" />Activar liberación y reasignación automática para esta agenda</label>
+        <div class="form-grid"><div><label>Tres avisos de confirmación</label><p>7 días → 5 días → 3 días antes</p><p class="field-help">Última oportunidad: 24 horas tras el tercer aviso. Reasignación a 2 días de la cita si no confirma.</p></div><div><label for="recovery-grace">Tolerancia de llegada (minutos)</label><input id="recovery-grace" type="number" @bind="graceMinutes" min="1" max="60" required /></div><div><label for="recovery-booking">Plazo para confirmar reservas de último momento (minutos)</label><input id="recovery-booking" type="number" @bind="bookingMinutes" min="1" max="120" required /></div><div><label for="recovery-minimum">Atención mínima en un espacio recuperado (minutos)</label><input id="recovery-minimum" type="number" @bind="minimumMinutes" min="10" max="180" required /></div></div>
+        <p class="field-help">Una cita pendiente se libera al vencer su confirmación. Una cita sin llegada registrada se libera al superar la tolerancia. Registra cada llegada a tiempo para conservar su cita. Las reservas de último momento tendrán el plazo indicado, sin superar la hora de inicio.</p>
+        <p class="field-help">Si la cita ya comenzó, se aprovecha únicamente el tiempo restante que permita el mínimo de atención y el traslado del nuevo paciente. Usa la duración normal como mínimo si no deseas consultas más cortas. Las citas asignadas automáticamente quedan confirmadas por la autorización registrada en su perfil.</p>
+        <p class="field-help">Al guardar, los nuevos plazos se aplicarán a las citas futuras pendientes y se notificará a sus pacientes. No se cancelan citas en consulta ni de pacientes cuya llegada ya fue registrada.</p>
+        <div class="form-footer"><button class="button primary" disabled="@Busy" type="submit">Guardar reglas de mi agenda</button></div>
+    </form>
+}
+@code {
+    [Parameter] public int DoctorId { get; set; }
+    private bool enabled;
+    private int confirmationHours = 24, graceMinutes = 15, bookingMinutes = 15, minimumMinutes = 10;
+    protected override Task OnInitializedAsync() => Run(async () => { var d = (await Clinic.DoctorsAsync()).Single(x => x.Id == DoctorId); enabled = d.AutomaticRecovery; confirmationHours = d.ConfirmationHours; graceMinutes = d.ArrivalGraceMinutes; bookingMinutes = d.LastMinuteConfirmationMinutes; minimumMinutes = d.MinimumRecoveredMinutes; });
+    private Task Save() => Run(async () => await Clinic.SaveRecoveryPolicyAsync(DoctorId, enabled, confirmationHours, graceMinutes, bookingMinutes, minimumMinutes), "Reglas guardadas. La recuperación se procesa automáticamente cada 30 segundos.");
+}
+
+

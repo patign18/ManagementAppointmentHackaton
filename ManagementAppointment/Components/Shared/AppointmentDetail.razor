@@ -1,0 +1,55 @@
+@inherits ClinicPageBase
+<Notice Kind="error" Message="@Error" />
+@if (editing) { <AppointmentEditor Item="@Item" OnSaved="OnChanged" OnCancel="@(() => editing = false)" /> }
+else {
+    <div class="appointment-detail"><span class="status-pill @StatusText.Css(Item.Status)">@StatusText.Label(Item.Status)</span><h3>@Item.Patient.FullName</h3><p class="muted">@Item.Doctor.FullName · @(Item.Doctor.Specialty?.Name ?? "Consulta médica")</p><div class="detail-meta"><span><Icon Name="calendar" />@Clock.Local(Item.StartUtc).ToString("dddd, dd MMMM yyyy")</span><span><Icon Name="clock" />@Clock.Local(Item.StartUtc).ToString("h.mm tt") – @Clock.Local(Item.EndUtc).ToString("h.mm tt")</span></div></div>
+    @if ((actor?.IsStaff == true || actor?.Role == Roles.Doctor) && !string.IsNullOrWhiteSpace(Item.ChangeRequest)) { <Notice Kind="info" Message="@("Solicitud de cambio: " + Item.ChangeRequest)" /> }
+    @if (Item.Status == AppointmentStatus.Pending && Item.ConfirmationDueUtc.HasValue) { <Notice Kind="info" Message="@($"Plazo del paciente: {Clock.Local(Item.ConfirmationDueUtc.Value):dd/MM h.mm tt}. Sin confirmación, el sistema liberará este espacio.")" /> }
+    @if (actor?.Role != Roles.Patient && !string.IsNullOrWhiteSpace(Item.AdministrativeNote)) { <p class="detail-note">@Item.AdministrativeNote</p> }
+    @if (cancel || request) {
+        <label for="change-reason">@(request ? "¿Qué fecha u horario prefieres?" : "Motivo de cancelación")</label><textarea id="change-reason" @bind="reason" maxlength="300" rows="3" placeholder="Escribe información administrativa, sin datos clínicos."></textarea><div class="form-footer"><button class="button secondary" @onclick="@(() => { cancel = false; request = false; })">Volver</button><button class="button @(cancel ? "danger" : "primary")" disabled="@Busy" @onclick="SubmitReason">@(cancel ? "Confirmar cancelación" : "Enviar solicitud")</button></div>
+    }
+    else {
+        <div class="detail-actions">
+            @if (Item.Status == AppointmentStatus.Pending && (actor?.IsStaff == true || actor?.Role is Roles.Patient or Roles.Doctor)) { <button class="button primary" disabled="@Busy" @onclick="@(() => Status(AppointmentStatus.Confirmed))"><Icon Name="check" />Registrar confirmación</button> }
+            @if (Item.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed) {
+                @if ((actor?.IsStaff == true || actor?.Role == Roles.Doctor) && DateOnly.FromDateTime(Clock.Local(Item.StartUtc)) == Clock.Today) { <button class="button primary" disabled="@Busy" @onclick="@(() => Status(AppointmentStatus.Waiting))">Registrar llegada</button> }
+                @if (actor?.IsStaff == true || canManage) { <button class="button secondary" @onclick="@(() => editing = true)">Reprogramar</button> }
+                @if (actor?.Role == Roles.Patient) { <button class="button secondary" @onclick="@(() => request = true)">Solicitar cambio</button> }
+                @if (actor?.IsStaff == true || actor?.Role is Roles.Patient or Roles.Doctor) { <button class="button text-danger" @onclick="@(() => cancel = true)">Cancelar cita</button> }
+                @if (actor?.Role != Roles.Patient && Item.EndUtc < DateTime.UtcNow) { <button class="button secondary" disabled="@Busy" @onclick="@(() => Status(AppointmentStatus.NoShow))">Marcar no asistió</button> }
+            }
+            @if (Item.Status == AppointmentStatus.Waiting && actor?.Role is Roles.Admin or Roles.Doctor) { <button class="button primary" disabled="@Busy" @onclick="@(() => Status(AppointmentStatus.InConsultation))">Iniciar consulta</button> }
+            @if (Item.Status == AppointmentStatus.InConsultation && actor?.Role is Roles.Admin or Roles.Doctor) { <button class="button primary" disabled="@Busy" @onclick="@(() => Status(AppointmentStatus.Completed))">Finalizar atención</button> }
+            @if ((Item.Status == AppointmentStatus.Waiting && actor?.Role is Roles.Admin or Roles.Reception or Roles.Doctor) || (Item.Status == AppointmentStatus.InConsultation && actor?.Role is Roles.Admin or Roles.Doctor)) { <button class="button text-danger" @onclick="@(() => cancel = true)">Registrar abandono y liberar espacio</button> }
+        </div>
+        @if (Item.Status is AppointmentStatus.Cancelled or AppointmentStatus.NoShow)
+        {
+            <h4 class="section-label">Qué ocurrió con este espacio</h4>
+            @if (history.FirstOrDefault(x => x.Action.StartsWith("Liberación automática:")) is { } release)
+            { <p class="detail-note">@release.Action</p> }
+            @if (reassignments.Count == 0)
+            { <p class="field-help">Este espacio todavía no tiene una reasignación registrada. El sistema necesita un paciente compatible en hold y un horario que aún se pueda aprovechar.</p> }
+            @foreach (var trace in reassignments)
+            {
+                <div class="detail-note"><strong>Reasignada a @trace.PatientName</strong><p>Espacio del @Clock.Local(trace.SlotStartUtc).ToString("dd/MM/yyyy h.mm tt") · Cita #@trace.AppointmentId</p><small>Asignación automática registrada el @Clock.Local(trace.AssignedUtc).ToString("dd/MM/yyyy h.mm tt")</small></div>
+            }
+        }
+        <h4 class="section-label">Actividad de la cita</h4><div class="history-list">@foreach (var h in history) { <div><span class="timeline-dot"></span><p>@h.Action<small>@Clock.Local(h.CreatedUtc).ToString("dd MMM yyyy · h.mm tt")</small></p></div> }</div>
+    }
+}
+@code {
+    [Parameter, EditorRequired] public Appointment Item { get; set; } = null!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private ClinicActor? actor;
+    private bool editing, cancel, request, canManage;
+    private string reason = "";
+    private List<AppointmentHistory> history = [];
+    private List<ReassignmentTrace> reassignments = [];
+    protected override Task OnInitializedAsync() => Run(async () => { actor = await Clinic.ActorAsync(); history = await Clinic.HistoryAsync(Item.Id); reassignments = await Clinic.ReassignmentTraceAsync(Item.Id); if (actor.Role == Roles.Doctor) canManage = actor.DoctorId == Item.DoctorId; });
+    private Task Status(AppointmentStatus status) => Run(async () => { await Clinic.ChangeStatusAsync(Item.Id, Item.Version, status); await OnChanged.InvokeAsync(); });
+    private Task SubmitReason() => Run(async () => { if (request) await Clinic.RequestChangeAsync(Item.Id, reason); else await Clinic.ChangeStatusAsync(Item.Id, Item.Version, AppointmentStatus.Cancelled, reason); await OnChanged.InvokeAsync(); });
+}
+
+
+

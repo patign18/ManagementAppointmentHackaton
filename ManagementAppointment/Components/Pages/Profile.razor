@@ -1,0 +1,16 @@
+@page "/perfil"
+@attribute [Authorize(Roles = Roles.Staff)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+<PageTitle>Mi perfil · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">TU INFORMACIÓN, AL DÍA</span><h1>Mi perfil</h1><p>Actualiza tus datos de contacto y preferencias.</p></div></div><Notice Kind="error" Message="@Error" /><Notice Message="@Success" />
+<section class="card padded profile-card">@if (Loading) { <p class="loading" role="status">Cargando tu perfil…</p> } else { <div class="card-heading"><div class="person-cell"><span class="avatar soft"><Icon Name="user" /></span><div><h3>@user?.FullName</h3><small>@user?.Email</small></div></div></div><EditForm Model="form" OnValidSubmit="Save"><DataAnnotationsValidator /><ValidationSummary /><label for="profile-name">Nombre completo</label><InputText id="profile-name" @bind-Value="form.FullName" maxlength="120" /><label for="profile-phone">Teléfono</label><InputText id="profile-phone" type="tel" @bind-Value="form.Phone" maxlength="30" /><label class="checkbox-label"><InputCheckbox @bind-Value="form.EmailConsent" />Acepto recibir avisos de cuenta y citas por correo electrónico.</label><p class="field-help">Para cambiar tu correo de acceso, contacta a la administración.</p><div class="form-footer"><button class="button primary" disabled="@Busy" type="submit">Guardar mis datos</button></div></EditForm> }</section>
+<section class="card padded profile-card" style="margin-top:24px"><h3>Cambiar contraseña</h3><form method="post" action="/auth/password"><AntiforgeryToken /><label for="current-password">Contraseña actual</label><input id="current-password" name="current" type="password" autocomplete="current-password" maxlength="128" required /><label for="new-password">Nueva contraseña</label><input id="new-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /><p class="field-help">12 caracteres, mayúscula, minúscula, número y símbolo.</p><label for="confirm-password">Repite la nueva contraseña</label><input id="confirm-password" name="confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required /><div class="form-footer"><button class="button secondary" type="submit">Actualizar contraseña</button></div></form></section>
+@code {
+    [SupplyParameterFromQuery] public string? Password { get; set; }
+    private ApplicationUser? user;
+    private ProfileForm form = new();
+    protected override Task OnInitializedAsync() => Run(async () => { user = await Clinic.ProfileAsync(); form = new() { FullName = user.FullName, Phone = user.PhoneNumber, EmailConsent = user.EmailConsent }; if (Password == "ok") Success = "Contraseña actualizada."; else if (Password == "error") Error = "No pudimos cambiar la contraseña. Revisa los datos y los requisitos."; });
+    private Task Save() => Run(async () => { await Clinic.SaveProfileAsync(form); user = await Clinic.ProfileAsync(); }, "Tus datos fueron actualizados.");
+}
+

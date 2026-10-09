@@ -1,0 +1,52 @@
+@page "/dashboard"
+@attribute [Authorize(Roles = Roles.Admin + "," + Roles.Reception + "," + Roles.Doctor)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+@inject IConfiguration Configuration
+@implements IAsyncDisposable
+<PageTitle>Resumen · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">@(actor?.Role == Roles.Doctor ? "MI CONSULTA" : "MI OFICINA")</span><h1>Mi oficina médica</h1><p>@Subtitle</p></div><div class="heading-actions"><div class="date-chip"><Icon Name="calendar" />@Clock.Today.ToString("dd MMM yyyy")</div>@if (canCreate) { <button class="button primary" @onclick="@(() => creating = true)"><Icon Name="plus" />Nueva cita</button> }</div></div>
+<Notice Kind="error" Message="@Error" /><section class="card padded" style="margin-bottom:24px"><div class="card-heading"><div><h3>Recupera los espacios de tu consulta</h3><p class="field-help">Publica tus horarios y configura las reglas de confirmación, llegada y asignación directa.</p></div><a class="button secondary" href="/medicos">Administrar agenda</a><a class="button primary" href="/lista-espera">Ver hold y reasignaciones</a></div></section>
+<div class="stats-grid"><section class="stat-card"><span class="stat-icon"><Icon Name="users" /></span><div><span class="stat-label">Pacientes de mi consulta</span><strong class="stat-number">@patients.Count</strong><small>Perfiles registrados por la oficina</small></div></section><section class="stat-card"><span class="stat-icon blue"><Icon Name="calendar" /></span><div><span class="stat-label">Citas programadas</span><strong class="stat-number">@future.Count</strong><small>Próximos seis meses</small></div></section><section class="stat-card"><span class="stat-icon amber"><Icon Name="clock" /></span><div><span class="stat-label">Por confirmar</span><strong class="stat-number">@future.Count(x => x.Status == AppointmentStatus.Pending)</strong><small>Tres avisos antes del vencimiento</small></div></section><section class="stat-card"><span class="stat-icon violet"><Icon Name="users" /></span><div><span class="stat-label">En hold / pueden adelantarse</span><strong class="stat-number">@hold.Count(x => x.Status == WaitlistStatus.Active)</strong><small>Cola de reasignación automática</small></div></section></div>
+@if (patients.Any(x => x.IsDemo)) { <Notice Kind="info" Message="Oficina de demostración con perfiles ficticios de Puerto Rico. Las contraseñas están protegidas y estos contactos no reciben correos." /> }
+@if (!Configuration.GetValue<bool>("Mail:Enabled")) { <Notice Kind="info" Message="La reasignación automática está preparada. Configura SMTP para enviar los avisos externos a pacientes reales." /> }
+<div class="dashboard-grid"><div class="dashboard-main">
+    <div class="welcome-banner"><div><span class="eyebrow">CADA CITA CUENTA</span><h2>@(actor?.Role == Roles.Doctor ? "Todo listo para una atención más cercana." : "Una agenda organizada, una mejor experiencia.")</h2><p>@(actor?.Role == Roles.Reception ? "Registra cada llegada y acompaña al paciente hasta su consulta." : "Consulta los próximos encuentros y mantén a tu equipo conectado.")</p><a href="@(actor?.Role == Roles.Reception ? "/recepcion" : "/calendario")" class="button secondary">@(actor?.Role == Roles.Reception ? "Ir a recepción" : "Abrir calendario")<Icon Name="arrow" Size="16" /></a></div><div class="banner-art"><Icon Name="doctor" Size="64" /></div></div>
+    <section class="card padded"><div class="card-heading"><div><h3>Actividad de la semana</h3><small>Citas registradas por día</small></div><span class="muted">Últimos 7 días</span></div><div class="chart-bars">@for (var i = 6; i >= 0; i--) { var date = Clock.Today.AddDays(-i); var count = week.Count(x => DateOnly.FromDateTime(Clock.Local(x.StartUtc)) == date); <div class="chart-column"><strong>@count</strong><div class="bar" style="height:@(count * 110 / Math.Max(1, Peak))px" title="@($"{date:dd MMM}: {count} citas")"></div><small>@date.ToString("ddd")</small></div> }</div></section>
+    <section class="card"><div class="card-heading" style="padding:23px 23px 0"><div><h3>Agenda de @day.ToString("dd MMM")</h3><small>Ordenada por hora de consulta</small></div><a href="/citas">Ver todas<Icon Name="chevron" Size="15" /></a></div>
+        @if (Loading) { <p class="loading" role="status">Cargando agenda…</p> } else if (items.Count == 0) { <EmptyState Title="Una agenda por comenzar" Description="Aquí aparecerán las citas del día seleccionado. Usa el calendario para consultar otra fecha." /> } else { <AppointmentTable Items="@items.Take(8)" OnSelect="@((Appointment x) => selected = x)" /> }
+    </section>
+    <section class="card padded"><div class="card-heading"><h3>Pacientes de la oficina</h3><a href="/pacientes">Ver todos</a></div>@foreach (var p in patients.Take(6)) { <a href="/pacientes" class="doctor-list-item"><span class="avatar soft">@AppointmentTable.Initials(p.FullName)</span><span><strong>@p.FullName</strong><small>@p.Municipality @(p.IsDemo ? "· DEMO" : "")</small></span></a> }</section>
+</div><aside class="dashboard-side"><section class="card padded"><MiniCalendar Selected="day" OnSelected="ChangeDay" /></section><section class="card padded"><div class="card-heading"><h3>Balance del día</h3></div><div class="day-summary"><span>Consultas completadas</span><strong>@Count(AppointmentStatus.Completed)</strong></div><div class="day-summary"><span>En consulta</span><strong>@Count(AppointmentStatus.InConsultation)</strong></div><div class="day-summary"><span>Canceladas</span><strong>@Count(AppointmentStatus.Cancelled)</strong></div><div class="day-summary"><span>No asistieron</span><strong>@Count(AppointmentStatus.NoShow)</strong></div></section>
+    <section class="card padded"><div class="card-heading"><h3>@(actor?.Role == Roles.Doctor ? "Mi especialidad" : "Equipo médico")</h3><a href="/medicos"><Icon Name="chevron" Size="16" /></a></div>@if (doctors.Count == 0) { <p class="muted">Registra al equipo médico desde Usuarios y acceso.</p> }@foreach (var d in doctors.Take(4)) { <a href="/medicos" class="doctor-list-item"><span class="avatar">@AppointmentTable.Initials(d.FullName)</span><span><strong>@d.FullName</strong><small>@(d.Specialty?.Name ?? "Especialidad por asignar")</small></span></a> }</section>
+    @if (actor?.Role == Roles.Admin && doctors.Count == 0) { <section class="card padded"><h3>Prepara tu oficina</h3><div class="onboarding-steps"><div class="onboarding-step"><span class="step-number">1</span><p><a href="/medicos">Agrega las especialidades</a><small>Organiza tus servicios.</small></p></div><div class="onboarding-step"><span class="step-number">2</span><p><a href="/usuarios">Crea las cuentas del equipo</a><small>Médicos y recepción.</small></p></div><div class="onboarding-step"><span class="step-number">3</span><p><a href="/medicos">Define los horarios</a><small>Activa la disponibilidad para citas.</small></p></div></div></section> }
+</aside></div>
+@if (creating) { <Modal Title="Nueva cita" OnClose="@(() => creating = false)"><AppointmentEditor OnSaved="Saved" OnCancel="@(() => creating = false)" /></Modal> }
+@if (selected != null) { <Modal Title="Detalle de la cita" OnClose="@(() => selected = null)"><AppointmentDetail Item="selected" OnChanged="Saved" /></Modal> }
+@code {
+    private ClinicActor? actor;
+    private DateOnly day;
+    private List<Appointment> items = [], week = [];
+    private List<Doctor> doctors = [];
+    private List<Patient> patients = [];
+    private List<Appointment> future = [];
+    private List<WaitlistEntry> hold = [];
+    private readonly CancellationTokenSource stopping = new();
+    private Task? refresh;
+    private bool creating, canCreate;
+    private Appointment? selected;
+    private int Count(AppointmentStatus s) => items.Count(x => x.Status == s);
+    private int Peak => week.GroupBy(x => DateOnly.FromDateTime(Clock.Local(x.StartUtc))).Select(x => x.Count()).DefaultIfEmpty(0).Max();
+    private string Subtitle => actor?.Role switch { Roles.Doctor => "Tu agenda, tus pacientes y cada atención del día.", Roles.Reception => "Gestiona la agenda y recibe a tus pacientes con todo a mano.", _ => "Este es el resumen de tu oficina médica." };
+    protected override async Task OnInitializedAsync() { day = Clock.Today; await Reload(); if (items.Count == 0 && future.Count > 0) { day = DateOnly.FromDateTime(Clock.Local(future[0].StartUtc)); await Reload(); } refresh = RefreshAsync(); }
+    private Task Reload() => Run(async () => { actor = await Clinic.ActorAsync(); doctors = await Clinic.DoctorsAsync(); patients = await Clinic.PatientsAsync(); hold = await Clinic.WaitlistAsync(); future = (await Clinic.AppointmentsAsync(Clock.Today, Clock.Today.AddDays(180))).Where(x => x.StartUtc > DateTime.UtcNow && x.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed).ToList(); canCreate = actor.IsStaff || actor.Role == Roles.Doctor; items = await Clinic.AppointmentsAsync(day, day); week = await Clinic.AppointmentsAsync(Clock.Today.AddDays(-6), Clock.Today); });
+    private async Task ChangeDay(DateOnly date) { if (Busy) return; day = date; await Reload(); }
+    private async Task RefreshAsync() { using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15)); try { while (await timer.WaitForNextTickAsync(stopping.Token)) await InvokeAsync(async () => { if (!Busy && selected == null && !creating) { await Reload(); StateHasChanged(); } }); } catch (OperationCanceledException) { } }
+    public async ValueTask DisposeAsync() { await stopping.CancelAsync(); if (refresh != null) await refresh; stopping.Dispose(); }
+    private async Task Saved() { creating = false; selected = null; await Reload(); }
+}
+
+
+
+
+

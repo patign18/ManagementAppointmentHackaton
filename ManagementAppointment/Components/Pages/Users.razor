@@ -1,0 +1,43 @@
+@page "/usuarios"
+@attribute [Authorize(Roles = Roles.Admin)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+<PageTitle>Usuarios y acceso · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">UN ACCESO PARA CADA PERSONA</span><h1>Usuarios y acceso</h1><p>Crea las cuentas del equipo y administra su disponibilidad de acceso.</p></div><button class="button primary" @onclick="New"><Icon Name="plus" />Nueva cuenta de personal</button></div>
+<Notice Kind="error" Message="@Error" /><Notice Message="@Success" />
+<section class="card"><div class="filter-bar"><div class="filter-field wide"><label for="users-search">Buscar cuenta</label><input id="users-search" @bind="search" @bind:event="oninput" @bind:after="ResetPage" placeholder="Nombre, correo o rol" /></div><button class="button secondary" @onclick="Reload" disabled="@Busy">Actualizar</button></div>@if (Loading) { <p class="loading" role="status">Cargando cuentas…</p> } else { <div class="table-scroll"><table class="clinic-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Acceso</th></tr></thead><tbody>@foreach (var entry in Filtered.Skip((page - 1) * 10).Take(10)) { <tr><td><div class="person-cell"><span class="avatar">@AppointmentTable.Initials(entry.User.FullName)</span><strong>@entry.User.FullName</strong></div></td><td>@entry.User.Email</td><td>@entry.Role @if (entry.Role != Roles.Patient && entry.User.Id != actor?.Id) { <button class="table-action" @onclick="@(() => EditRole(entry.User, entry.Role))">Cambiar rol</button> }</td><td><span class="status-pill @(entry.User.IsActive ? "confirmed" : "cancelled")">@(entry.User.IsActive ? "Activo" : "Inactivo")</span></td><td><button class="table-action" disabled="@(Busy || !entry.User.IsActive)" @onclick="@(() => PasswordLink(entry.User.Id))">Crear / cambiar contraseña</button><button class="table-action" disabled="@(Busy || entry.User.Id == actor?.Id)" @onclick="@(() => Toggle(entry.User.Id))">@(entry.User.IsActive ? "Desactivar" : "Activar")</button></td></tr> }</tbody></table></div><div class="pagination-bar"><span>@Filtered.Count() cuentas</span><div><button class="button small secondary" disabled="@(page == 1)" @onclick="@(() => page--)">Anterior</button><span>Página @(page)</span><button class="button small secondary" disabled="@(page * 10 >= Filtered.Count())" @onclick="@(() => page++)">Siguiente</button></div></div> }</section>
+<p class="field-help">Los pacientes son registros internos de la oficina y no tienen acceso a la web. Los permisos de agenda de cada médico se administran en Médicos y horarios.</p>
+@if (editing) { <Modal Title="Nueva cuenta de personal" OnClose="@(() => editing = false)"><Notice Kind="error" Message="@Error" /><EditForm Model="form" OnValidSubmit="Save"><DataAnnotationsValidator /><ValidationSummary /><label for="staff-name">Nombre completo</label><InputText id="staff-name" @bind-Value="form.FullName" maxlength="120" /><label for="staff-email">Correo electrónico</label><InputText id="staff-email" type="email" @bind-Value="form.Email" maxlength="254" /><label for="staff-role">Rol de la cuenta</label><InputSelect id="staff-role" @bind-Value="form.Role"><option>@Roles.Reception</option><option>@Roles.Doctor</option><option>@Roles.Admin</option></InputSelect>@if (form.Role == Roles.Doctor) { <label for="staff-specialty">Especialidad</label><InputSelect id="staff-specialty" @bind-Value="form.SpecialtyId"><option value="">Asignar después</option>@foreach (var s in specialties) { <option value="@s.Id">@s.Name</option> }</InputSelect><p class="field-help">Después de crear la cuenta, define sus horarios en Médicos y horarios.</p> }<label for="staff-password">Contraseña inicial</label><InputText id="staff-password" type="password" @bind-Value="form.Password" autocomplete="new-password" maxlength="128" /><p class="field-help">12 caracteres, mayúscula, minúscula, número y símbolo. Comparte el acceso de forma privada y solicita que cambie su contraseña.</p><div class="form-footer"><button class="button secondary" type="button" @onclick="@(() => editing = false)">Cancelar</button><button class="button primary" type="submit" disabled="@Busy">Crear cuenta</button></div></EditForm></Modal> }
+@code {
+    private ClinicActor? actor;
+    private List<(ApplicationUser User, string Role)> items = [];
+    private List<Specialty> specialties = [];
+    private StaffForm form = new();
+    private string search = "";
+    private string? passwordLink;
+    private bool editing;
+    private int page = 1;
+    private void ResetPage() => page = 1;
+    private ApplicationUser? roleUser;
+    private string selectedRole = Roles.Reception;
+    private IEnumerable<(ApplicationUser User, string Role)> Filtered => items.Where(x => (x.User.FullName + " " + x.User.Email + " " + x.Role).Contains(search, StringComparison.OrdinalIgnoreCase));
+    protected override Task OnInitializedAsync() => Reload();
+    private async Task Load() { actor = await Clinic.ActorAsync(); items = await Clinic.UsersAsync(); specialties = await Clinic.SpecialtiesAsync(); page = 1; }
+    private Task Reload() => Run(Load);
+    private void New() { form = new(); editing = true; Error = null; }
+    private Task Save() => Run(async () => { await Clinic.CreateStaffAsync(form); form.Password = ""; editing = false; await Load(); }, "Cuenta creada. Puedes configurar los horarios del médico si corresponde.");
+    private Task PasswordLink(string id) => Run(async () => { passwordLink = await Clinic.PasswordSetupLinkAsync(id); });
+    private Task Toggle(string id) => Run(async () => { await Clinic.ToggleUserAsync(id); await Load(); }, "Estado de acceso actualizado.");
+    private void EditRole(ApplicationUser user, string role) { roleUser = user; selectedRole = role; Error = null; }
+    private Task SaveRole() => Run(async () => { await Clinic.ChangeStaffRoleAsync(roleUser!.Id, selectedRole); roleUser = null; await Load(); }, "Rol actualizado. La persona deberá volver a iniciar sesión.");
+}
+
+@if (roleUser != null) { <Modal Title="Cambiar rol de personal" OnClose="@(() => roleUser = null)"><Notice Kind="error" Message="@Error" /><p class="muted">Cuenta de @roleUser.FullName</p><label for="new-user-role">Nuevo rol</label><select id="new-user-role" @bind="selectedRole"><option>@Roles.Reception</option><option>@Roles.Doctor</option><option>@Roles.Admin</option></select><p class="field-help">Este cambio modifica las funciones disponibles e invalida las sesiones de la cuenta.</p><div class="form-footer"><button class="button secondary" @onclick="@(() => roleUser = null)">Cancelar</button><button class="button primary" disabled="@Busy" @onclick="SaveRole">Confirmar nuevo rol</button></div></Modal> }
+
+
+
+
+
+
+@if (passwordLink != null) { <Modal Title="Enlace privado para establecer contraseña" OnClose="@(() => passwordLink = null)"><p class="field-help">Entrega este enlace de forma privada a la persona. Puede elegir su contraseña sin correo; vence en 2 horas y se invalida al utilizarse.</p><textarea readonly rows="4" aria-label="Enlace privado de contraseña">@passwordLink</textarea><a class="button primary" href="@passwordLink">Abrir formulario de contraseña</a></Modal> }
+

@@ -1,0 +1,11 @@
+.vs/
+**/bin/
+**/obj/
+.packages/
+*.user
+*.log
+TestResults/
+# Configuración privada. Solo la plantilla sin credenciales se comparte.
+**/appsettings*.json
+!**/appsettings.Template.json
+LocalDemo/

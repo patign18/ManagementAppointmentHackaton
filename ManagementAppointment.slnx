@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ManagementAppointment/ManagementAppointment.csproj" />
+  <Project Path="ManagementAppointment.Verification/ManagementAppointment.Verification.csproj" />
+</Solution>

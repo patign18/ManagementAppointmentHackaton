@@ -1,0 +1,47 @@
+@page "/calendario"
+@attribute [Authorize(Roles = Roles.Admin + "," + Roles.Reception + "," + Roles.Doctor)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+<PageTitle>Calendario · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">EL TIEMPO, BIEN ORGANIZADO</span><h1>Calendario médico</h1><p>Explora la agenda por día, semana o mes. Selecciona una cita para gestionarla.</p></div>@if (canCreate) { <button class="button primary" @onclick="@(() => Book(null))"><Icon Name="plus" />Nueva cita</button> }</div><Notice Kind="error" Message="@Error" />
+<section class="card"><div class="calendar-toolbar"><div class="calendar-controls"><button class="icon-button" disabled="@Busy" @onclick="@(() => Move(-1))" aria-label="Periodo anterior">‹</button><h3>@Caption</h3><button class="icon-button" disabled="@Busy" @onclick="@(() => Move(1))" aria-label="Periodo siguiente">›</button><button class="button small secondary" disabled="@Busy" @onclick="Today">Hoy</button></div><div class="segmented" aria-label="Vista de calendario"><button disabled="@Busy" class="@(view == "day" ? "active" : "")" @onclick="@(() => SetView("day"))">Día</button><button disabled="@Busy" class="@(view == "week" ? "active" : "")" @onclick="@(() => SetView("week"))">Semana</button><button disabled="@Busy" class="@(view == "month" ? "active" : "")" @onclick="@(() => SetView("month"))">Mes</button></div></div>
+<div class="filter-bar"><div class="filter-field"><label for="calendar-doctor">Médico</label><select id="calendar-doctor" disabled="@Busy" @bind="doctorId" @bind:after="Reload"><option value="0">Todos mis médicos</option>@foreach (var d in doctors) { <option value="@d.Id">@d.FullName</option> }</select></div><div class="filter-field"><label for="calendar-specialty">Especialidad</label><select id="calendar-specialty" @bind="specialtyId"><option value="0">Todas</option>@foreach (var s in specialties) { <option value="@s.Id">@s.Name</option> }</select></div><div class="filter-field"><label for="calendar-status">Estado</label><select id="calendar-status" @bind="status"><option value="">Todos</option>@foreach (var s in Enum.GetValues<AppointmentStatus>()) { <option value="@s">@StatusText.Label(s)</option> }</select></div></div>
+@if (Loading) { <p class="loading" role="status">Cargando el calendario…</p> }
+else if (view == "month") { <div class="month-grid">@foreach (var name in new[] { "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo" }) { <div class="month-heading">@name[..3]</div> }@for (var i = 0; i < 42; i++) { var cell = RangeStart.AddDays(i); <div class="month-cell @(cell.Month != date.Month ? "outside" : "")"><button class="day-number @(cell == Clock.Today ? "today" : "")" style="border:0" aria-label="@("Consultar " + cell.ToString("dd MMMM"))" @onclick="@(() => OpenDay(cell))">@cell.Day</button>@foreach (var item in OnDay(cell).Take(status == "" ? 3 : int.MaxValue)) { <button class="calendar-appointment @StatusText.Css(item.Status)" @onclick="@(() => selected = item)" title="@($"{Clock.Local(item.StartUtc):h.mm tt} · {item.Patient.FullName} · {item.Doctor.FullName}")">@Clock.Local(item.StartUtc).ToString("h.mm tt") @item.Patient.FullName</button> }@if (status == "" && OnDay(cell).Count() > 3) { <button class="text-button" style="font-size:10px" @onclick="@(() => OpenDay(cell))">+@(OnDay(cell).Count() - 3) más</button> }</div> }</div> }
+else if (view == "week") { <div class="table-scroll"><div class="week-grid">@for (var i = 0; i < 7; i++) { var cell = RangeStart.AddDays(i); <div class="week-column"><h4>@cell.ToString("ddd dd MMM")</h4>@foreach (var item in OnDay(cell)) { <button class="calendar-appointment @StatusText.Css(item.Status)" @onclick="@(() => selected = item)"><strong>@Clock.Local(item.StartUtc).ToString("h.mm tt") – @Clock.Local(item.EndUtc).ToString("h.mm tt")</strong><small>@item.Patient.FullName</small><small>@item.Doctor.FullName</small></button> }@if (!OnDay(cell).Any()) { <p class="field-help" style="text-align:center">Sin citas</p> }<button class="text-button" @onclick="@(() => OpenDay(cell))">Ver día →</button></div> }</div></div> }
+else { @if (!Filtered.Any()) { <EmptyState Title="Este día no tiene citas" Description="Selecciona un médico para consultar sus horarios disponibles." /> } else { <AppointmentTable Items="Filtered" OnSelect="@((Appointment x) => selected = x)" /> }@if (doctorId != 0) { <div class="card padded" style="border-radius:0;border:0;border-top:1px solid var(--line)"><div class="card-heading"><h3>Horarios disponibles</h3><span class="muted">@date.ToString("dd MMM")</span></div>@if (slots.Count == 0) { <p class="field-help">No hay horarios disponibles en esta fecha.</p> } else { <div class="heading-actions" style="flex-wrap:wrap">@foreach (var slot in slots) { <button class="button small secondary" disabled="@(!canCreate)" @onclick="@(() => Book(slot))">@slot.ToString("h.mm tt")</button> }</div> }</div> } }
+</section>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px" aria-label="Filtrar calendario por estado"><button type="button" class="button small secondary" @onclick="@(() => status = "")">Ver todas</button>@foreach (var s in Enum.GetValues<AppointmentStatus>()) { <button type="button" class="status-pill calendar-status-filter @StatusText.Css(s) @(status == s.ToString() ? "selected" : "")" aria-pressed="@(status == s.ToString())" @onclick="@(() => ToggleStatus(s))">@StatusText.Label(s) (@items.Count(x => x.Status == s && (doctorId == 0 || x.DoctorId == doctorId) && (specialtyId == 0 || x.Doctor.SpecialtyId == specialtyId)))</button> }</div>
+@if (creating) { <Modal Title="Nueva cita" OnClose="@(() => creating = false)"><AppointmentEditor DoctorId="doctorId" InitialDate="date" InitialTime="bookingTime" OnSaved="Changed" OnCancel="@(() => creating = false)" /></Modal> }
+@if (selected != null) { <Modal Title="Detalle de la cita" OnClose="@(() => selected = null)"><AppointmentDetail Item="selected" OnChanged="Changed" /></Modal> }
+@code {
+    private DateOnly date;
+    private string view = "week", status = "";
+    private int doctorId, specialtyId;
+    private List<Doctor> doctors = [];
+    private List<Specialty> specialties = [];
+    private List<Appointment> items = [];
+    private List<TimeOnly> slots = [];
+    private bool canCreate, creating;
+    private TimeOnly? bookingTime;
+    private Appointment? selected;
+    private DateOnly MonthStart => new(date.Year, date.Month, 1);
+    private DateOnly RangeStart => view switch { "day" => date, "week" => date.AddDays(-((int)date.DayOfWeek + 6) % 7), _ => MonthStart.AddDays(-((int)MonthStart.DayOfWeek + 6) % 7) };
+    private DateOnly RangeEnd => view switch { "day" => date, "week" => RangeStart.AddDays(6), _ => RangeStart.AddDays(41) };
+    private string Caption => view switch { "day" => date.ToString("dd MMMM yyyy"), "week" => $"{RangeStart:dd MMM} – {RangeEnd:dd MMM yyyy}", _ => date.ToString("MMMM yyyy") };
+    private IEnumerable<Appointment> Filtered => items.Where(x => (doctorId == 0 || x.DoctorId == doctorId) && (specialtyId == 0 || x.Doctor.SpecialtyId == specialtyId) && (status == "" || x.Status.ToString() == status));
+    private IEnumerable<Appointment> OnDay(DateOnly cell) => Filtered.Where(x => DateOnly.FromDateTime(Clock.Local(x.StartUtc)) == cell);
+    protected override async Task OnInitializedAsync() { date = Clock.Today; await Run(async () => { var a = await Clinic.ActorAsync(); doctors = await Clinic.DoctorsAsync(); specialties = await Clinic.SpecialtiesAsync(); if (a.Role == Roles.Doctor) doctorId = a.DoctorId ?? 0; canCreate = a.IsStaff || doctors.Any(x => x.CanManageAppointments); await Load(); }); }
+    private async Task Load() { items = await Clinic.AppointmentsAsync(RangeStart, RangeEnd); slots = view == "day" && doctorId != 0 ? await Clinic.SlotsAsync(doctorId, date) : []; }
+    private Task Reload() => Run(Load);
+    private async Task Move(int step) { if (Busy) return; date = view == "month" ? date.AddMonths(step) : date.AddDays(step * (view == "week" ? 7 : 1)); await Reload(); }
+    private async Task Today() { if (Busy) return; date = Clock.Today; await Reload(); }
+    private async Task SetView(string next) { if (Busy) return; view = next; await Reload(); }
+    private async Task OpenDay(DateOnly cell) { if (Busy) return; date = cell; view = "day"; await Reload(); }
+    private void ToggleStatus(AppointmentStatus next) => status = status == next.ToString() ? "" : next.ToString();
+    private void Book(TimeOnly? time) { bookingTime = time; creating = true; }
+    private async Task Changed() { selected = null; creating = false; await Reload(); }
+}
+
+
+

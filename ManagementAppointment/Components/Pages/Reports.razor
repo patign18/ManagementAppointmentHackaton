@@ -1,0 +1,24 @@
+@page "/reportes"
+@attribute [Authorize(Roles = Roles.Admin + "," + Roles.Reception + "," + Roles.Doctor)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+@inject IJSRuntime JS
+<PageTitle>Reportes · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">DATOS PARA ORGANIZAR MEJOR</span><h1>Reportes de citas</h1><p>Consulta la actividad del periodo dentro de tu acceso autorizado.</p></div>@if (actor?.Role != Roles.Reception) { <button class="button secondary" @onclick="Export" disabled="@(Busy || items.Count == 0)"><Icon Name="chart" />Exportar a Excel</button> }</div><Notice Kind="error" Message="@Error" />
+<section class="card" style="margin-bottom:24px"><div class="filter-bar"><div class="filter-field"><label for="report-from">Desde</label><input id="report-from" type="date" @bind="from" /></div><div class="filter-field"><label for="report-to">Hasta</label><input id="report-to" type="date" @bind="until" /></div><div class="filter-field"><label for="report-doctor">Médico</label><select id="report-doctor" @bind="doctorId"><option value="0">Todos mis médicos</option>@foreach (var d in doctors) { <option value="@d.Id">@d.FullName</option> }</select></div><button class="button primary" @onclick="Reload" disabled="@Busy">Consultar periodo</button></div></section>
+<div class="stats-grid"><div class="stat-card"><span class="stat-icon"><Icon Name="calendar" /></span><div><span class="stat-label">Citas registradas</span><span class="stat-number">@Filtered.Count()</span></div></div><div class="stat-card"><span class="stat-icon blue"><Icon Name="check" /></span><div><span class="stat-label">Completadas</span><span class="stat-number">@Filtered.Count(x => x.Status == AppointmentStatus.Completed)</span></div></div><div class="stat-card"><span class="stat-icon amber"><Icon Name="close" /></span><div><span class="stat-label">Canceladas</span><span class="stat-number">@Filtered.Count(x => x.Status == AppointmentStatus.Cancelled)</span></div></div><div class="stat-card"><span class="stat-icon violet"><Icon Name="user" /></span><div><span class="stat-label">No asistieron</span><span class="stat-number">@Filtered.Count(x => x.Status == AppointmentStatus.NoShow)</span></div></div></div>
+<div class="report-grid"><section class="card padded"><div class="card-heading"><h3>Estado de las citas</h3></div>@foreach (var s in Enum.GetValues<AppointmentStatus>()) { var count = Filtered.Count(x => x.Status == s); <div class="report-row"><span>@StatusText.Label(s)</span><div class="report-track"><span style="width:@(100 * count / Math.Max(1, Filtered.Count()))%"></span></div><strong>@count</strong></div> }</section><section class="card padded"><div class="card-heading"><h3>Actividad por médico</h3></div>@if (!Filtered.Any()) { <EmptyState Icon="chart" Title="Sin actividad en el periodo" Description="Los reportes se generan a partir de las citas reales de la oficina." /> }@foreach (var group in Filtered.GroupBy(x => x.Doctor.FullName).OrderByDescending(x => x.Count())) { <div class="report-row"><span>@group.Key</span><div class="report-track"><span style="width:@(100 * group.Count() / Math.Max(1, Filtered.Count()))%"></span></div><strong>@group.Count()</strong></div> }</section>
+@if (actor?.Role != Roles.Reception) { <section class="card padded"><div class="card-heading"><h3>Horas con mayor actividad</h3></div>@foreach (var group in Filtered.Where(x => x.Status != AppointmentStatus.Cancelled).GroupBy(x => Clock.Local(x.StartUtc).Hour).OrderBy(x => x.Key)) { <div class="report-row"><span>@group.Key.ToString("00"):00</span><div class="report-track"><span style="width:@(100 * group.Count() / Math.Max(1, Filtered.Count()))%"></span></div><strong>@group.Count()</strong></div> }</section> }
+</div>
+@code {
+    private ClinicActor? actor;
+    private DateOnly from, until;
+    private List<Appointment> items = [];
+    private List<Doctor> doctors = [];
+    private int doctorId;
+    private IEnumerable<Appointment> Filtered => items.Where(x => doctorId == 0 || x.DoctorId == doctorId);
+    protected override async Task OnInitializedAsync() { from = new(Clock.Today.Year, Clock.Today.Month, 1); until = Clock.Today; await Reload(); }
+    private Task Reload() => Run(async () => { actor = await Clinic.ActorAsync(); doctors = await Clinic.DoctorsAsync(); items = await Clinic.AppointmentsAsync(from, until); });
+    private Task Export() => Run(async () => { actor = await Clinic.ActorAsync(); if (actor.Role == Roles.Reception) throw new UnauthorizedAccessException(); await JS.InvokeVoidAsync("clinic.download", $"citas-{from:yyyyMMdd}-{until:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(ReportExport.Excel(Filtered, Clock))); });
+}
+

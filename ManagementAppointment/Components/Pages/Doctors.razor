@@ -1,0 +1,27 @@
+@page "/medicos"
+@attribute [Authorize(Roles = Roles.Staff)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+<PageTitle>Médicos · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">AGENDA Y DISPONIBILIDAD</span><h1>Agenda de la oficina</h1><p>Publica horarios, administra bloqueos y configura la recuperación automática.</p></div>@if (actor?.Role == Roles.Admin) { <a href="/usuarios" class="button primary"><Icon Name="plus" />Registrar médico</a> }</div><Notice Kind="error" Message="@Error" /><Notice Message="@Success" />
+<section class="card" style="margin-bottom:24px"><div class="filter-bar"><div class="filter-field wide"><label for="doctors-search">Buscar médico</label><input id="doctors-search" @bind="search" @bind:event="oninput" placeholder="Nombre del profesional" /></div><div class="filter-field"><label for="doctors-specialty">Especialidad</label><select id="doctors-specialty" @bind="specialtyId"><option value="0">Todas</option>@foreach (var s in specialties) { <option value="@s.Id">@s.Name</option> }</select></div><button class="button secondary" @onclick="Reload" disabled="@Busy">Actualizar</button></div></section>
+@if (Loading) { <p class="loading" role="status">Cargando equipo médico…</p> } else if (!Filtered.Any()) { <section class="card"><EmptyState Icon="doctor" Title="Todavía no hay médicos para mostrar" Description="Administración puede crear las cuentas médicas y asignar sus horarios para comenzar a recibir reservas." /></section> } else { <div class="doctor-grid">@foreach (var d in Filtered) { <section class="card doctor-card"><div class="doctor-card-top"><span class="avatar">@AppointmentTable.Initials(d.FullName)</span><div><h3>@d.FullName</h3><span class="specialty-tag">@(d.Specialty?.Name ?? "Especialidad por asignar")</span></div></div><div class="doctor-meta"><span><Icon Name="clock" Size="16" />@d.ConsultationMinutes minutos</span><span><Icon Name="calendar" Size="16" />@(d.Schedules.Count == 0 ? "Sin horarios" : "Agenda configurada")</span></div><button class="button secondary full" @onclick="@(() => selected = d)">@(actor?.Role is Roles.Admin or Roles.Doctor ? "Administrar mi agenda" : "Ver horarios")</button></section> }</div> }
+@if (actor?.Role == Roles.Admin) { <section class="card padded" style="margin-top:25px;max-width:680px"><h3>Especialidades de la oficina</h3><p class="field-help">Agrega los servicios que ofrece tu equipo. Luego asígnalos al médico correspondiente.</p><form @onsubmit="AddSpecialty" @onsubmit:preventDefault><div class="schedule-form"><div><label for="new-specialty">Nueva especialidad</label><input id="new-specialty" @bind="newSpecialty" minlength="2" maxlength="80" required /></div><button class="button secondary" disabled="@Busy" type="submit"><Icon Name="plus" Size="16" />Agregar</button></div></form><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:15px">@foreach (var s in specialties) { <span class="specialty-tag">@s.Name</span> }</div></section> }
+@if (selected != null) { <Modal Title="@selected.FullName" OnClose="@(() => selected = null)"><DoctorSettings DoctorId="selected.Id" OnChanged="Reload" /></Modal> }
+@code {
+    private ClinicActor? actor;
+    private List<Doctor> doctors = [];
+    private List<Specialty> specialties = [];
+    private string search = "", newSpecialty = "";
+    private int specialtyId;
+    private Doctor? selected;
+    private IEnumerable<Doctor> Filtered => doctors.Where(x => x.FullName.Contains(search, StringComparison.OrdinalIgnoreCase) && (specialtyId == 0 || x.SpecialtyId == specialtyId));
+    protected override Task OnInitializedAsync() => Reload();
+    private async Task Load() { actor = await Clinic.ActorAsync(); doctors = await Clinic.DoctorsAsync(); specialties = await Clinic.SpecialtiesAsync(); }
+    private Task Reload() => Run(Load);
+    private Task AddSpecialty() => Run(async () => { await Clinic.AddSpecialtyAsync(newSpecialty); newSpecialty = ""; await Load(); }, "Especialidad agregada.");
+}
+
+
+
+

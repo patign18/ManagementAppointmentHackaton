@@ -1,0 +1,12 @@
+@page "/recuperar"
+@layout AuthLayout
+@inject AccountMailer Mailer
+<PageTitle>Recuperar acceso · ManagementAppointment</PageTitle>
+<div class="auth-form"><a href="/login" class="back-link">← Volver al inicio de sesión</a><span class="eyebrow">ESTAMOS PARA AYUDARTE</span><h2>Recupera tu acceso</h2><p class="muted">Indica el correo de tu cuenta para solicitar un enlace de recuperación.</p>
+    @if (Sent) { <Notice Message="Si la cuenta está activa y tiene habilitados los avisos por correo, recibirás un enlace cuando el servicio de correo esté disponible." /> }
+    <section class="card padded" style="margin:20px 0"><h3>Crear o cambiar contraseña sin correo</h3><p class="field-help">Administración puede generar tu enlace privado desde Usuarios y acceso. Abre ese enlace para elegir tu nueva contraseña. Es válido durante 2 horas.</p><a class="button secondary full" href="/restablecer">Tengo un código de acceso</a></section>
+    @if (!Mailer.Enabled) { <p class="field-help">La recuperación por correo estará disponible al configurar el envío. Mientras tanto puedes usar el enlace privado de administración.</p> }
+    else { <form method="post" action="/auth/forgot"><AntiforgeryToken /><label for="email">Correo electrónico</label><input type="email" name="email" id="email" maxlength="254" autocomplete="email" required /><button class="button primary full" type="submit">Enviar enlace de recuperación</button></form> }
+</div>
+@code { [SupplyParameterFromQuery] public bool Sent { get; set; } }
+

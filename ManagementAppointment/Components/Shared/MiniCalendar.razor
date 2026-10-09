@@ -1,0 +1,8 @@
+<div class="mini-calendar"><div class="calendar-title"><h3>@month.ToString("MMMM yyyy")</h3><div class="calendar-controls"><button class="icon-button" aria-label="Mes anterior" @onclick="@(() => month = month.AddMonths(-1))">‹</button><button class="icon-button" aria-label="Mes siguiente" @onclick="@(() => month = month.AddMonths(1))">›</button></div></div><div class="mini-week">@foreach (var name in new[] { "L", "M", "M", "J", "V", "S", "D" }) { <span>@name</span> }</div><div class="mini-days">@for (var i = 0; i < 42; i++) { var date = GridStart.AddDays(i); <button class="@(date == Selected ? "today" : date.Month != month.Month ? "outside" : "")" aria-label="@date.ToString("dddd dd MMMM yyyy")" aria-pressed="@(date == Selected)" @onclick="@(() => OnSelected.InvokeAsync(date))">@date.Day</button> }</div></div>
+@code {
+    [Parameter] public DateOnly Selected { get; set; }
+    [Parameter] public EventCallback<DateOnly> OnSelected { get; set; }
+    private DateOnly month;
+    private DateOnly GridStart => month.AddDays(-((int)month.DayOfWeek + 6) % 7);
+    protected override void OnInitialized() => month = new DateOnly(Selected.Year, Selected.Month, 1);
+}

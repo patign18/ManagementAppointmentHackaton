@@ -1,0 +1,14 @@
+@inherits ClinicPageBase
+<details class="notifications-menu"><summary aria-label="Notificaciones"><Icon Name="bell" />@if (items.Any(x => !x.IsRead)) { <span class="notification-dot"></span> }</summary>
+    <div class="notification-panel"><div class="card-heading"><h3>Notificaciones</h3><button class="text-button" disabled="@Busy" @onclick="Read">Marcar leídas</button></div><Notice Kind="error" Message="@Error" />
+        @if (items.Count == 0) { <p class="muted">No tienes notificaciones por ahora.</p> }
+        @foreach (var item in items) { <a href="/citas" class="notification-item @(item.IsRead ? "" : "unread")"><Icon Name="calendar" /><span>@item.Message<small>@Clock.Local(item.CreatedUtc).ToString("dd MMM · h.mm tt")</small></span></a> }
+        <button class="text-button" @onclick="Reload" disabled="@Busy">Actualizar</button>
+    </div>
+</details>
+@code {
+    private List<ClinicNotification> items = [];
+    protected override Task OnInitializedAsync() => Reload();
+    private Task Reload() => Run(async () => items = await Clinic.NotificationsAsync());
+    private Task Read() => Run(async () => { await Clinic.ReadNotificationsAsync(); items = await Clinic.NotificationsAsync(); });
+}

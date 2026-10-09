@@ -1,0 +1,43 @@
+@page "/lista-espera"
+@attribute [Authorize(Roles = Roles.Staff)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+@implements IAsyncDisposable
+@inject IConfiguration Configuration
+<PageTitle>Hold y reasignaciones · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">GESTIÓN AUTOMÁTICA DE LA OFICINA</span><h1>Hold y reasignaciones</h1><p>Pacientes disponibles para ocupar cancelaciones o adelantar una cita posterior.</p></div><button class="button secondary" disabled="@Busy" @onclick="Reload">Actualizar</button></div>
+<Notice Kind="error" Message="@Error" /><Notice Message="@Success" />
+@if (!Configuration.GetValue<bool>("Mail:Enabled")) { <Notice Kind="info" Message="La reasignación funciona con los perfiles DEMO. Para reasignar y avisar a pacientes reales, habilita SMTP. Los contactos ficticios nunca reciben correos." /> }
+<div class="stats-grid"><section class="stat-card"><span class="stat-icon"><Icon Name="users" /></span><div><span class="stat-label">Pacientes en hold</span><strong class="stat-number">@entries.Count(x => x.Status == WaitlistStatus.Active && x.AppointmentToAdvanceId == null)</strong></div></section><section class="stat-card"><span class="stat-icon amber"><Icon Name="clock" /></span><div><span class="stat-label">Citas que pueden adelantarse</span><strong class="stat-number">@entries.Count(x => x.Status == WaitlistStatus.Active && x.AppointmentToAdvanceId != null)</strong></div></section><section class="stat-card"><span class="stat-icon blue"><Icon Name="check" /></span><div><span class="stat-label">Reasignaciones realizadas</span><strong class="stat-number">@recovered.Count</strong></div></section></div>
+<section class="card padded" style="margin-bottom:24px"><h3>Agregar un paciente a la cola</h3><p class="field-help">La oficina registra su disponibilidad y autorización. El sistema busca espacios cada 30 segundos, asigna directamente y deja constancia del cambio.</p>
+<form @onsubmit="Join" @onsubmit:preventDefault><div class="form-grid"><div><label for="hold-patient">Paciente registrado</label><select id="hold-patient" @bind="patientId" @bind:after="ResetAdvance" required><option value="0">Selecciona un paciente</option>@foreach (var p in patients.Where(x => x.IsActive)) { <option value="@p.Id">@p.FullName @(p.IsDemo ? "· DEMO" : "")</option> }</select></div><div><label for="hold-doctor">Agenda médica</label><select id="hold-doctor" @bind="doctorId" @bind:after="ResetAdvance" required><option value="0">Selecciona una agenda</option>@foreach (var d in doctors.Where(x => x.AutomaticRecovery)) { <option value="@d.Id">@d.FullName</option> }</select></div></div>
+<label for="hold-advance">Tipo de disponibilidad</label><select id="hold-advance" @bind="appointmentId"><option value="">En hold: asignar una nueva cita</option>@foreach (var item in future.Where(x => x.PatientId == patientId && x.DoctorId == doctorId)) { <option value="@item.Id">Adelantar cita del @Clock.Local(item.StartUtc).ToString("dd MMM · h.mm tt")</option> }</select>
+<div class="form-grid"><div><label for="hold-from">Disponible desde</label><DateTime12Input Id="hold-from" @bind-Value="from" /></div><div><label for="hold-until">Disponible hasta</label><DateTime12Input Id="hold-until" @bind-Value="until" /></div><div><label for="hold-notice">Aviso mínimo para trasladarse (minutos)</label><input id="hold-notice" type="number" @bind="noticeMinutes" min="0" max="10080" required /></div></div>
+<p class="field-help">Al adelantar una cita, se cambia su horario y se libera el anterior; no se crea una segunda cita para ese paciente. Registra la autorización de contacto y reasignación en su perfil. Usa 0 minutos de aviso solo si ya está en la oficina.</p><div class="form-footer"><a class="button secondary" href="/pacientes">Ver perfiles</a><button class="button primary" type="submit" disabled="@(Busy || patientId == 0 || doctorId == 0)">Agregar a hold</button></div></form></section>
+@if (recovered.Count > 0) { <section class="card" style="margin-bottom:24px"><div class="card-heading" style="padding:24px"><h3>Últimas citas recuperadas</h3><small>Hasta 100 citas; abre una para ver su historial.</small></div><AppointmentTable Items="recovered" OnSelect="@((Appointment item) => selected = item)" /></section> }
+<section class="card"><div class="card-heading" style="padding:24px"><h3>Cola de pacientes</h3><small>Hasta las últimas 200 entradas</small></div>
+@if (Loading) { <p class="loading" role="status">Consultando hold…</p> } else if (entries.Count == 0) { <EmptyState Icon="clock" Title="Todavía no hay pacientes en hold" Description="Agrega los pacientes disponibles desde el formulario de la oficina." /> } else { <div class="table-scroll"><table class="clinic-table"><thead><tr><th>Paciente</th><th>Disponibilidad</th><th>Cita posterior</th><th>Aviso</th><th>Estado</th><th>Acción</th></tr></thead><tbody>@foreach (var e in entries) { <tr><td><strong>@e.Patient.FullName</strong><small>@e.Doctor.FullName</small></td><td>@Clock.Local(e.FromUtc).ToString("dd/MM h.mm tt")<small>hasta @Clock.Local(e.UntilUtc).ToString("dd/MM h.mm tt")</small></td><td>@(e.AppointmentToAdvance == null ? "En hold sin cita" : Clock.Local(e.AppointmentToAdvance.StartUtc).ToString("dd/MM h.mm tt"))</td><td>@e.MinimumNoticeMinutes min</td><td><span class="status-pill @(e.Status == WaitlistStatus.Active ? "pending" : e.Status == WaitlistStatus.Assigned ? "confirmed" : "cancelled")">@Label(e.Status)</span></td><td>@if (e.Status == WaitlistStatus.Active) { <button class="table-action" disabled="@Busy" @onclick="@(() => Withdraw(e.Id))">Retirar de hold</button> }</td></tr> }</tbody></table></div> }</section>
+@if (selected != null) { <Modal Title="Cita recuperada automáticamente" OnClose="@(() => selected = null)"><AppointmentDetail Item="selected" OnChanged="Changed" /></Modal> }
+@code {
+    [SupplyParameterFromQuery(Name = "paciente")] public int? InitialPatient { get; set; }
+    private List<Doctor> doctors = [];
+    private List<Patient> patients = [];
+    private List<WaitlistEntry> entries = [];
+    private List<Appointment> recovered = [], future = [];
+    private Appointment? selected;
+    private int doctorId, patientId, noticeMinutes = 60;
+    private int? appointmentId;
+    private DateTime from, until;
+    private readonly CancellationTokenSource stopping = new();
+    private Task? refresh;
+    private static string Label(WaitlistStatus status) => status switch { WaitlistStatus.Active => "En hold", WaitlistStatus.Assigned => "Reasignada", WaitlistStatus.Withdrawn => "Retirada", _ => "Periodo vencido" };
+    protected override async Task OnInitializedAsync() { from = Clock.Local(DateTime.UtcNow).AddHours(1); until = from.AddDays(60); await Reload(); if (patients.Any(x => x.Id == InitialPatient)) patientId = InitialPatient!.Value; doctorId = doctors.FirstOrDefault(x => x.AutomaticRecovery)?.Id ?? 0; refresh = RefreshAsync(); }
+    private async Task Load() { doctors = await Clinic.DoctorsAsync(); patients = await Clinic.PatientsAsync(); entries = await Clinic.WaitlistAsync(); recovered = await Clinic.RecoveredAppointmentsAsync(); future = (await Clinic.AppointmentsAsync(Clock.Today, Clock.Today.AddDays(180))).Where(x => x.StartUtc > DateTime.UtcNow && x.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed).ToList(); }
+    private Task Reload() => Run(Load);
+    private void ResetAdvance() => appointmentId = null;
+    private async Task Changed() { selected = null; await Reload(); }
+    private Task Join() => Run(async () => { await Clinic.JoinWaitlistAsync(patientId, doctorId, from, until, noticeMinutes, appointmentId); await Load(); }, "Paciente agregado a hold. La reasignación se realizará automáticamente cuando haya un espacio compatible.");
+    private Task Withdraw(int id) => Run(async () => { await Clinic.WithdrawWaitlistAsync(id); await Load(); }, "Paciente retirado de hold.");
+    private async Task RefreshAsync() { using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15)); try { while (await timer.WaitForNextTickAsync(stopping.Token)) await InvokeAsync(async () => { if (!Busy && selected == null) { await Reload(); StateHasChanged(); } }); } catch (OperationCanceledException) { } }
+    public async ValueTask DisposeAsync() { await stopping.CancelAsync(); if (refresh != null) await refresh; stopping.Dispose(); }
+}

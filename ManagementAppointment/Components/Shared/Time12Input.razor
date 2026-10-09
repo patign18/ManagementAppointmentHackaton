@@ -1,0 +1,19 @@
+<div style="display:flex;gap:6px" role="group" aria-label="@Label">
+    <select id="@Id" aria-label="Hora" @bind="hour" @bind:after="Changed">
+        @for (var i = 1; i <= 12; i++) { <option value="@i">@i</option> }
+    </select>
+    <select aria-label="Minutos" @bind="minute" @bind:after="Changed">
+        @for (var i = 0; i < 60; i++) { <option value="@i">@i.ToString("00")</option> }
+    </select>
+    <select aria-label="am o pm" @bind="period" @bind:after="Changed"><option value="am">am</option><option value="pm">pm</option></select>
+</div>
+@code {
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public string Label { get; set; } = "Horario";
+    [Parameter] public TimeOnly Value { get; set; }
+    [Parameter] public EventCallback<TimeOnly> ValueChanged { get; set; }
+    private int hour, minute;
+    private string period = "am";
+    protected override void OnParametersSet() { hour = Value.Hour % 12; if (hour == 0) hour = 12; minute = Value.Minute; period = Value.Hour >= 12 ? "pm" : "am"; }
+    private Task Changed() => ValueChanged.InvokeAsync(new TimeOnly(hour % 12 + (period == "pm" ? 12 : 0), minute));
+}

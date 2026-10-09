@@ -1,0 +1,11 @@
+@page "/Error"
+@layout AuthLayout
+@using System.Diagnostics
+<PageTitle>No pudimos completar la operación</PageTitle>
+<div class="auth-form"><span class="eyebrow">PODEMOS VOLVER A INTENTARLO</span><h2>No pudimos completar la operación</h2><p class="muted">Vuelve a cargar la página. Si el problema continúa, contacta a la administración.</p><a href="/" class="button primary">Ir a mi inicio<Icon Name="arrow" /></a>@if (!string.IsNullOrEmpty(RequestId)) { <p class="field-help">Referencia para soporte: @RequestId</p> }</div>
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    private string? RequestId;
+    protected override void OnInitialized() => RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}
+

@@ -1,0 +1,9 @@
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider Authentication
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Authentication.GetAuthenticationStateAsync();
+        Navigation.NavigateTo(state.User.IsInRole(Roles.Patient) ? "/login" : state.User.Identity?.IsAuthenticated == true ? "/acceso-denegado" : "/login", forceLoad: true);
+    }
+}

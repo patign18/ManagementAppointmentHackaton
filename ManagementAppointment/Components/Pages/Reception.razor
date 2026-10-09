@@ -1,0 +1,19 @@
+@page "/recepcion"
+@attribute [Authorize(Roles = Roles.Admin + "," + Roles.Reception + "," + Roles.Doctor)]
+@rendermode InteractiveServer
+@inherits ClinicPageBase
+<PageTitle>Sala de espera · ManagementAppointment</PageTitle>
+<div class="page-heading"><div><span class="eyebrow">ACOMPAÑAMOS CADA LLEGADA</span><h1>Sala de espera</h1><p>Consulta el orden de llegada y el avance de cada atención.</p></div><button class="button secondary" @onclick="Reload" disabled="@Busy">Actualizar sala</button></div><Notice Kind="error" Message="@Error" />
+<div class="stats-grid"><div class="stat-card"><span class="stat-icon blue"><Icon Name="clock" /></span><div><span class="stat-label">En espera</span><span class="stat-number">@items.Count(x => x.Status == AppointmentStatus.Waiting)</span></div></div><div class="stat-card"><span class="stat-icon violet"><Icon Name="doctor" /></span><div><span class="stat-label">En consulta</span><span class="stat-number">@items.Count(x => x.Status == AppointmentStatus.InConsultation)</span></div></div><div class="stat-card"><span class="stat-icon"><Icon Name="check" /></span><div><span class="stat-label">Completadas hoy</span><span class="stat-number">@items.Count(x => x.Status == AppointmentStatus.Completed)</span></div></div><div class="stat-card"><span class="stat-icon amber"><Icon Name="calendar" /></span><div><span class="stat-label">Por llegar</span><span class="stat-number">@items.Count(x => x.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed)</span></div></div></div>
+@if (Loading) { <p class="loading" role="status">Consultando la sala…</p> } else if (!Queue.Any()) { <section class="card"><EmptyState Icon="heart" Title="La sala está tranquila" Description="Registra la llegada desde el detalle de la cita. Los pacientes aparecerán aquí en orden de llegada." /></section> } else { <div class="queue-grid">@foreach (var item in Queue) { <section class="card queue-card"><div class="queue-top"><span class="avatar soft">@AppointmentTable.Initials(item.Patient.FullName)</span><span class="status-pill @StatusText.Css(item.Status)">@StatusText.Label(item.Status)</span></div><h3>@item.Patient.FullName</h3><p>@item.Doctor.FullName</p><p><Icon Name="clock" Size="16" /> Cita @Clock.Local(item.StartUtc).ToString("h.mm tt") · Llegada @(item.ArrivalUtc.HasValue ? Clock.Local(item.ArrivalUtc.Value).ToString("h.mm tt") : "—")</p><button class="button secondary full" @onclick="@(() => selected = item)">Abrir atención<Icon Name="arrow" Size="16" /></button></section> }</div> }
+<section class="card" style="margin-top:24px"><div class="card-heading" style="padding:23px 23px 0"><h3>Pacientes por llegar</h3><a href="/citas">Ver agenda<Icon Name="chevron" Size="16" /></a></div>@if (!items.Any(x => x.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed)) { <p class="loading">No hay más llegadas pendientes para hoy.</p> } else { <AppointmentTable Items="@items.Where(x => x.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed)" OnSelect="@((Appointment x) => selected = x)" /> }</section>
+@if (selected != null) { <Modal Title="Atención del paciente" OnClose="@(() => selected = null)"><AppointmentDetail Item="selected" OnChanged="Changed" /></Modal> }
+@code {
+    private List<Appointment> items = [];
+    private Appointment? selected;
+    private IEnumerable<Appointment> Queue => items.Where(x => x.Status is AppointmentStatus.Waiting or AppointmentStatus.InConsultation).OrderBy(x => x.ArrivalUtc);
+    protected override Task OnInitializedAsync() => Reload();
+    private Task Reload() => Run(async () => items = await Clinic.AppointmentsAsync(Clock.Today, Clock.Today));
+    private async Task Changed() { selected = null; await Reload(); }
+}
+

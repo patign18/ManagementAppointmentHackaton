@@ -1,0 +1,16 @@
+<nav class="clinic-nav" aria-label="Menú principal" onclick="if(window.matchMedia('(max-width:760px)').matches &amp;&amp; event.target.closest('a')) document.getElementById('mobile-menu').checked=false"><span class="nav-caption">OFICINA MÉDICA</span>
+    <AuthorizeView Roles="@(Roles.Admin + "," + Roles.Reception + "," + Roles.Doctor)"><Authorized>
+        <NavLink href="/dashboard"><Icon Name="grid" />Resumen</NavLink>
+        <NavLink href="/citas"><Icon Name="calendar" />Citas</NavLink>
+        <NavLink href="/calendario"><Icon Name="clock" />Calendario</NavLink>
+        <NavLink href="/pacientes"><Icon Name="users" />Pacientes</NavLink>
+        <NavLink href="/medicos"><Icon Name="doctor" />Médicos y horarios</NavLink>
+        <NavLink href="/recepcion"><Icon Name="heart" />Sala de espera</NavLink>
+        <NavLink href="/reportes"><Icon Name="chart" />Reportes</NavLink>
+    </Authorized></AuthorizeView>
+    <AuthorizeView Roles="@Roles.Admin"><Authorized><span class="nav-caption">ADMINISTRACIÓN</span><NavLink href="/usuarios"><Icon Name="shield" />Usuarios y acceso</NavLink></Authorized></AuthorizeView>
+    <NavLink href="/lista-espera"><Icon Name="clock" />Hold y reasignaciones</NavLink>
+    <span class="nav-caption">PERSONAL</span><NavLink href="/perfil"><Icon Name="user" />Mi perfil</NavLink>
+</nav>
+
+

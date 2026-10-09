@@ -1,0 +1,49 @@
+@inherits ClinicPageBase
+@if (Loading) { <p class="loading" role="status">Consultando la agenda…</p> }
+else {
+    <Notice Kind="error" Message="@Error" />
+    <EditForm Model="form" OnValidSubmit="Save"><DataAnnotationsValidator /><ValidationSummary />
+        @if (actor?.Role != Roles.Patient) { <label for="appointment-patient">Paciente</label><InputSelect id="appointment-patient" @bind-Value="form.PatientId" disabled="@(Item != null)"><option value="0">Selecciona un paciente</option>@foreach (var p in patients.Where(x => x.IsActive)) { <option value="@p.Id">@p.FullName · @p.DocumentNumber</option> }</InputSelect> }
+        <label for="appointment-doctor">Médico</label><InputSelect id="appointment-doctor" @bind-Value="form.DoctorId" @bind-Value:after="RefreshSlots"><option value="0">Selecciona un médico</option>@foreach (var d in doctors.Where(x => x.IsActive)) { <option value="@d.Id">@d.FullName · @(d.Specialty?.Name ?? "Sin especialidad")</option> }</InputSelect>
+        <label for="appointment-date">Fecha</label><InputDate id="appointment-date" @bind-Value="form.Date" @bind-Value:after="RefreshSlots" min="@Clock.Today.ToString("yyyy-MM-dd")" max="@Clock.Today.AddDays(180).ToString("yyyy-MM-dd")" />
+        <label for="appointment-time">Horario disponible</label><select id="appointment-time" @bind="time" required disabled="@(form.DoctorId == 0 || Busy)"><option value="">Selecciona una hora</option>@foreach (var t in slots) { <option value="@t.ToString("HH:mm")">@t.ToString("h.mm tt")</option> }</select>
+        @if (form.DoctorId != 0 && slots.Count == 0) { <p class="field-help">No hay horarios disponibles en esta fecha. Prueba otro día o contacta a recepción.</p> }
+        <p class="field-help">Los horarios corresponden a la zona de la oficina. La disponibilidad se confirma al guardar.</p>
+        @if (doctors.FirstOrDefault(x => x.Id == form.DoctorId) is { AutomaticRecovery: true } policy) { <p class="field-help">Este médico requiere confirmar con @policy.ConfirmationHours horas de anticipación. Si reservas dentro de ese plazo, tendrás hasta @policy.LastMinuteConfirmationMinutes minutos para confirmar, sin superar el inicio. Sin llegada registrada tras @policy.ArrivalGraceMinutes minutos, se liberará el espacio.</p> }
+        @if (actor?.IsStaff == true || actor?.Role == Roles.Doctor) { <label for="appointment-note">Nota administrativa <span class="muted">(opcional)</span></label><InputTextArea id="appointment-note" @bind-Value="form.Note" maxlength="300" placeholder="Solo información necesaria para organizar la cita." /> }
+        <div class="form-footer"><button type="button" class="button secondary" @onclick="OnCancel">Volver</button><button type="submit" class="button primary" disabled="@(Busy || slots.Count == 0)"><Icon Name="check" />@(Busy ? "Guardando…" : Item == null ? "Reservar cita" : "Guardar nuevo horario")</button></div>
+    </EditForm>
+}
+@code {
+    [Parameter] public Appointment? Item { get; set; }
+    [Parameter] public int DoctorId { get; set; }
+    [Parameter] public int PatientId { get; set; }
+    [Parameter] public DateOnly? InitialDate { get; set; }
+    [Parameter] public TimeOnly? InitialTime { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private AppointmentForm form = new();
+    private ClinicActor? actor;
+    private List<Patient> patients = [];
+    private List<Doctor> doctors = [];
+    private List<TimeOnly> slots = [];
+    private string time = "";
+    protected override Task OnInitializedAsync() => Run(async () => {
+        actor = await Clinic.ActorAsync(); patients = await Clinic.PatientsAsync(); doctors = await Clinic.DoctorsAsync();
+        form = Item == null ? new() { Date = InitialDate ?? Clock.Today, DoctorId = DoctorId, PatientId = PatientId } : new() { Id = Item.Id, PatientId = Item.PatientId, DoctorId = Item.DoctorId, Date = DateOnly.FromDateTime(Clock.Local(Item.StartUtc)), Time = TimeOnly.FromDateTime(Clock.Local(Item.StartUtc)), Note = Item.AdministrativeNote, Version = Item.Version };
+        if (actor.Role == Roles.Doctor) form.DoctorId = actor.DoctorId ?? 0;
+        time = Item == null ? InitialTime?.ToString("HH:mm") ?? "" : form.Time.ToString("HH:mm"); await LoadSlots();
+    });
+    private async Task LoadSlots() {
+        slots = form.DoctorId == 0 ? [] : await Clinic.SlotsAsync(form.DoctorId, form.Date, form.Id);
+        if (!slots.Any(x => x.ToString("HH:mm") == time)) time = "";
+    }
+    private Task RefreshSlots() => Run(LoadSlots);
+    private Task Save() => Run(async () => {
+        if (!TimeOnly.TryParseExact(time, "HH:mm", out var selected)) throw new ClinicException("Selecciona un horario disponible.");
+        form.Time = selected; await Clinic.SaveAppointmentAsync(form); await OnSaved.InvokeAsync();
+    });
+}
+
+
+

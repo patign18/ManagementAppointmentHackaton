@@ -1,0 +1,36 @@
+@inherits ClinicPageBase
+<Notice Kind="error" Message="@Error" /><Notice Message="@Success" />
+@if (Loading) { <p class="loading" role="status">Consultando los horarios…</p> } else {
+    @if (CanEdit) { <EditForm Model="form" OnValidSubmit="Save"><DataAnnotationsValidator /><ValidationSummary /><label for="doctor-name">Nombre profesional</label><InputText id="doctor-name" @bind-Value="form.FullName" maxlength="120" /><div class="form-grid"><div><label for="doctor-specialty">Especialidad</label><InputSelect id="doctor-specialty" @bind-Value="form.SpecialtyId"><option value="">Sin asignar</option>@foreach (var s in specialties) { <option value="@s.Id">@s.Name</option> }</InputSelect></div><div><label for="doctor-duration">Duración de consulta (minutos)</label><InputNumber id="doctor-duration" @bind-Value="form.ConsultationMinutes" min="10" max="180" /></div></div><label for="doctor-phone">Contacto profesional</label><InputText id="doctor-phone" type="tel" @bind-Value="form.Phone" maxlength="30" /><div class="form-footer"><button class="button primary" type="submit" disabled="@Busy">Guardar datos del médico</button></div></EditForm> }
+    else { <p class="muted">@(doctor?.Specialty?.Name ?? "Sin especialidad asignada") · @doctor?.ConsultationMinutes minutos por consulta.</p> }
+    <h4 class="section-label">Horario semanal</h4><p class="field-help">Agrega más de un intervalo para separar descansos. Horas de la oficina.</p>
+    @if (doctor?.Schedules.Count == 0) { <p class="muted">No hay horarios configurados.</p> }
+    @foreach (var s in doctor?.Schedules.OrderBy(x => ((int)x.Day + 6) % 7).ThenBy(x => x.Start) ?? Enumerable.Empty<DoctorSchedule>()) { <div class="schedule-item"><span><strong>@DayName(s.Day)</strong><small>@s.Start.ToString("h.mm tt") – @s.End.ToString("h.mm tt")</small></span>@if (CanEdit) { <button class="text-button" disabled="@Busy" @onclick="@(() => RemoveSchedule(s.Id))">Quitar</button> }</div> }
+    @if (CanEdit) { <form @onsubmit="AddSchedule" @onsubmit:preventDefault><div class="schedule-form"><div><label for="schedule-day">Día</label><select id="schedule-day" @bind="scheduleDay">@foreach (var d in Enum.GetValues<DayOfWeek>()) { <option value="@d">@DayName(d)</option> }</select></div><div><label for="schedule-start">Desde</label><Time12Input Id="schedule-start" @bind-Value="scheduleStart" /></div><div><label for="schedule-end">Hasta</label><Time12Input Id="schedule-end" @bind-Value="scheduleEnd" /></div><button class="button secondary" disabled="@Busy" type="submit"><Icon Name="plus" Size="16" />Agregar</button></div></form> }
+    <h4 class="section-label">Ausencias y bloqueos</h4>@if (blocks.Count == 0) { <p class="muted">Sin bloqueos próximos.</p> }@foreach (var b in blocks) { <div class="schedule-item"><span><strong>@b.Reason</strong><small>@Clock.Local(b.StartUtc).ToString("dd MMM · h.mm tt") – @Clock.Local(b.EndUtc).ToString("dd MMM · h.mm tt")</small></span>@if (CanEdit) { <button class="text-button" @onclick="@(() => RemoveBlock(b.Id))" disabled="@Busy">Quitar</button> }</div> }
+    @if (CanEdit) { <form @onsubmit="AddBlock" @onsubmit:preventDefault><div class="form-grid"><div><label for="block-start">Inicio de ausencia</label><DateTime12Input Id="block-start" @bind-Value="blockStart" /></div><div><label for="block-end">Fin de ausencia</label><DateTime12Input Id="block-end" @bind-Value="blockEnd" /></div></div><label for="block-reason">Motivo administrativo</label><input id="block-reason" @bind="blockReason" maxlength="200" placeholder="Vacaciones, ausencia o cierre de agenda" required /><div class="form-footer"><button class="button secondary" type="submit" disabled="@Busy">Bloquear periodo</button></div></form> }
+}
+@if (CanEdit) { <RecoverySettings DoctorId="DoctorId" /> }
+@code {
+    [Parameter] public int DoctorId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private bool CanEdit => actor?.Role == Roles.Admin || (actor?.Role == Roles.Doctor && actor.DoctorId == DoctorId);
+    private ClinicActor? actor;
+    private Doctor? doctor;
+    private DoctorForm form = new();
+    private List<Specialty> specialties = [];
+    private List<ScheduleException> blocks = [];
+    private DayOfWeek scheduleDay = DayOfWeek.Monday;
+    private TimeOnly scheduleStart = new(9, 0), scheduleEnd = new(13, 0);
+    private DateTime blockStart, blockEnd;
+    private string blockReason = "";
+    private static string DayName(DayOfWeek day) => new DateTime(2026, 1, 4).AddDays((int)day).ToString("dddd");
+    protected override Task OnInitializedAsync() => Run(async () => { actor = await Clinic.ActorAsync(); specialties = await Clinic.SpecialtiesAsync(); await Load(); form = new() { Id = DoctorId, FullName = doctor!.FullName, SpecialtyId = doctor.SpecialtyId, ConsultationMinutes = doctor.ConsultationMinutes, Phone = doctor.Phone, CanManageAppointments = doctor.CanManageAppointments }; blockStart = Clock.Today.AddDays(1).ToDateTime(TimeOnly.MinValue); blockEnd = blockStart.AddDays(1); });
+    private async Task Load() { doctor = (await Clinic.DoctorsAsync()).Single(x => x.Id == DoctorId); blocks = await Clinic.BlocksAsync(DoctorId); }
+    private Task Save() => Run(async () => { await Clinic.SaveDoctorAsync(form); await Load(); await OnChanged.InvokeAsync(); }, "Datos del médico actualizados.");
+    private Task AddSchedule() => Run(async () => { await Clinic.AddScheduleAsync(DoctorId, scheduleDay, scheduleStart, scheduleEnd); await Load(); await OnChanged.InvokeAsync(); }, "Horario agregado.");
+    private Task RemoveSchedule(int id) => Run(async () => { await Clinic.RemoveScheduleAsync(id); await Load(); await OnChanged.InvokeAsync(); }, "Horario retirado.");
+    private Task AddBlock() => Run(async () => { await Clinic.AddBlockAsync(DoctorId, blockStart, blockEnd, blockReason); blockReason = ""; await Load(); await OnChanged.InvokeAsync(); }, "Periodo bloqueado.");
+    private Task RemoveBlock(int id) => Run(async () => { await Clinic.RemoveBlockAsync(id); await Load(); await OnChanged.InvokeAsync(); }, "Bloqueo retirado.");
+}
+

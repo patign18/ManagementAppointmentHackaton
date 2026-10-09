@@ -1,0 +1,9 @@
+@inject OfficeClock Clock
+<div class="table-scroll"><table class="clinic-table"><thead><tr><th>Paciente</th><th>Médico</th><th>Fecha y hora</th><th>Estado</th><th><span class="visually-hidden">Acciones</span></th></tr></thead><tbody>
+@foreach (var item in Items) { <tr @key="item.Id"><td><div class="person-cell"><span class="avatar soft">@Initials(item.Patient.FullName)</span><div><strong>@item.Patient.FullName</strong><small>Cita #@item.Id</small></div></div></td><td><strong>@item.Doctor.FullName</strong><small>@item.Doctor.Specialty?.Name</small></td><td><strong>@Clock.Local(item.StartUtc).ToString("dd MMM yyyy")</strong><small>@Clock.Local(item.StartUtc).ToString("h.mm tt") – @Clock.Local(item.EndUtc).ToString("h.mm tt")</small></td><td><span class="status-pill @StatusText.Css(item.Status)">@StatusText.Label(item.Status)</span>@if (!string.IsNullOrWhiteSpace(item.ChangeRequest)) { <small class="change-request">Cambio solicitado</small> }</td><td><button class="table-action" @onclick="@(() => OnSelect.InvokeAsync(item))" aria-label="@("Ver cita de " + item.Patient.FullName)">Ver detalles<Icon Name="chevron" Size="16" /></button></td></tr> }
+</tbody></table></div>
+@code {
+    [Parameter] public IEnumerable<Appointment> Items { get; set; } = [];
+    [Parameter] public EventCallback<Appointment> OnSelect { get; set; }
+    public static string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => x[0])).ToUpperInvariant();
+}

@@ -1,0 +1,11 @@
+<input id="@Id" type="date" aria-label="Fecha" @bind="date" @bind:after="Changed" required />
+<Time12Input Label="Horario" @bind-Value="time" @bind-Value:after="Changed" />
+@code {
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public DateTime Value { get; set; }
+    [Parameter] public EventCallback<DateTime> ValueChanged { get; set; }
+    private DateTime date;
+    private TimeOnly time;
+    protected override void OnParametersSet() { date = Value.Date; time = TimeOnly.FromDateTime(Value); }
+    private Task Changed() => ValueChanged.InvokeAsync(date.Date.Add(time.ToTimeSpan()));
+}
